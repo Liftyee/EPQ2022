@@ -15,7 +15,7 @@
 #include <SPI.h>
 #include <INA226_WE.h>
 
-#define RELAY 6
+#define RELAY 9
 #define DIGI_CS 5
 
 #define I2C_ADDRESS 0x40
@@ -161,13 +161,26 @@ void loop() {
   Serial.print("Digipot position: ");
   Serial.print((int)getDigipot());
   Serial.println();
-
-  digitalWrite(RELAY, !digitalRead(RELAY));
   
   delay(3000);
   if (Serial.available()) {
-    byte p = (byte)Serial.parseInt();
-    setDigipot(p);
+    int instr = Serial.parseInt();
+    if (instr > 256) {
+      digitalWrite(RELAY, !digitalRead(RELAY));
+      
+    } else if (instr == 256) {
+      setDigipot(0);
+      for (int i = 0; i < 127; i++) {
+        incDigipot();
+        Serial.println(i);
+        delay(20);
+      }
+      digitalWrite(RELAY, 0);
+      setDigipot(0);
+    } else {
+      byte p = (byte)instr;
+      setDigipot(p);
+    }
   }
   
 }
