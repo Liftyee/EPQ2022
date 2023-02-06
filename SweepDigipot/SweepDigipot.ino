@@ -18,7 +18,7 @@
 #define RELAY 9
 #define DIGI_CS 5
 #define ENABLE 10
-#define UPDATE_PERIOD 3000
+#define UPDATE_PERIOD 1000
 
 #define I2C_ADDRESS 0x40
 
@@ -128,11 +128,13 @@ void setup() {
   // ina226.setCorrectionFactor(0.95);
   
   Serial.println("INA226 Current Sensor Example Sketch - Continuous");
-
+  Serial.println("Digipot setting, Output voltage, Output current, INA calculated output power");
   pinMode(RELAY, OUTPUT);
-  digitalWrite(RELAY, LOW);
+  digitalWrite(RELAY, HIGH);
   
   ina226.waitUntilConversionCompleted(); //if you comment this line the first data might be zero
+  setDigipot(0);
+  delay(UPDATE_PERIOD);
 }
 
 void loop() {
@@ -148,41 +150,14 @@ void loop() {
   current_mA = ina226.getCurrent_mA();
   power_mW = ina226.getBusPower();
   loadVoltage_V  = busVoltage_V + (shuntVoltage_mV/1000);
-  
-  Serial.print("Shunt Voltage [mV]: "); Serial.println(shuntVoltage_mV);
-  Serial.print("Bus Voltage [V]: "); Serial.println(busVoltage_V);
-  Serial.print("Load Voltage [V]: "); Serial.println(loadVoltage_V);
-  Serial.print("Current[mA]: "); Serial.println(current_mA);
-  Serial.print("Bus Power [mW]: "); Serial.println(power_mW);
-  if(!ina226.overflow) {
-    Serial.println("Values OK - no overflow");
-  }
-  else {
-    Serial.println("Overflow! Choose higher current range");
-  }
-  Serial.print("Digipot position: ");
+
   Serial.print((int)getDigipot());
+  //Serial.print("Shunt Voltage [mV]: "); Serial.println(shuntVoltage_mV);
+  //Serial.print("Bus Voltage [V]: "); Serial.println(busVoltage_V);
+  Serial.print(","); Serial.print(loadVoltage_V);
+  Serial.print(","); Serial.print(current_mA/1000);
+  Serial.print(","); Serial.print(power_mW/1000);
   Serial.println();
-  
   delay(UPDATE_PERIOD);
-  if (Serial.available()) {
-    int instr = Serial.parseInt();
-    if (instr > 256) {
-      digitalWrite(RELAY, !digitalRead(RELAY));
-      
-    } else if (instr == 256) {
-      setDigipot(0);
-      for (int i = 0; i < 127; i++) {
-        incDigipot();
-        Serial.println(i);
-        delay(20);
-      }
-      digitalWrite(RELAY, 0);
-      setDigipot(0);
-    } else {
-      byte p = (byte)instr;
-      setDigipot(p);
-    }
-  }
-  
+  incDigipot();
 }
