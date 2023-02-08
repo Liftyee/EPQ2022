@@ -19,6 +19,7 @@
 #define DIGI_CS 5
 #define ENABLE 10
 #define UPDATE_PERIOD 1000
+#define N_SAMPLES 10
 
 #define I2C_ADDRESS 0x40
 
@@ -67,7 +68,7 @@ byte getDigipot()
 
     return res & 0xff;       // The wiper position is in the low order byte so & with 0xff to remove the extra info.
 }
-
+long long lastUpd;
 void setup() {
   Serial.begin(9600);
   while(!Serial); // wait until serial comes up on Arduino Leonardo or MKR WiFi 1010
@@ -135,8 +136,12 @@ void setup() {
   ina226.waitUntilConversionCompleted(); //if you comment this line the first data might be zero
   setDigipot(0);
   delay(UPDATE_PERIOD);
+  lastUpd = millis();
 }
 
+float lV_t;
+float lI_t;
+float lP_t;
 void loop() {
   float shuntVoltage_mV = 0.0;
   float loadVoltage_V = 0.0;
@@ -151,13 +156,23 @@ void loop() {
   power_mW = ina226.getBusPower();
   loadVoltage_V  = busVoltage_V + (shuntVoltage_mV/1000);
 
-  Serial.print((int)getDigipot());
-  //Serial.print("Shunt Voltage [mV]: "); Serial.println(shuntVoltage_mV);
-  //Serial.print("Bus Voltage [V]: "); Serial.println(busVoltage_V);
-  Serial.print(","); Serial.print(loadVoltage_V);
-  Serial.print(","); Serial.print(current_mA/1000);
-  Serial.print(","); Serial.print(power_mW/1000);
-  Serial.println();
-  delay(UPDATE_PERIOD);
-  incDigipot();
+  lV_t += busVoltage_V;
+  lI_t += current_mA;
+  lP_t += power_mW;
+  
+  if (millis() >= lastUpd+UPDATE_PERIOD) {
+    Serial.print((int)getDigipot());
+    //Serial.print("Shunt Voltage [mV]: "); Serial.println(shuntVoltage_mV);
+    //Serial.print("Bus Voltage [V]: "); Serial.println(busVoltage_V);
+    Serial.print(","); Serial.print(lV_t/N_SAMPLES);
+    Serial.print(","); Serial.print((lI_t/N_SAMPLES)/1000);
+    Serial.print(","); Serial.print((lP_t/N_SAMPLES)/1000);
+    Serial.println();
+    lastUpd = millis();
+    incDigipot();
+    lV_t = 0;
+    lI_t = 0;
+    lP_t = 0;
+  }
+  delay((int)(UPDATE_PERIOD/N_SAMPLES));
 }
