@@ -90,7 +90,7 @@ void setup() {
   AVERAGE_512        512
   AVERAGE_1024      1024
   */
-  //ina226.setAverage(AVERAGE_16); // choose mode and uncomment for change of default
+  ina226.setAverage(AVERAGE_16); // choose mode and uncomment for change of default
 
   /* Set conversion time in microseconds
      One set of shunt and bus voltage conversion will take: 

@@ -1,15 +1,6 @@
 /***************************************************************************
-* Example sketch for the INA226_WE library
-*
-* This sketch is based on the continuous mode example but uses the function setResistorRange to set a different resistor value. 
-*  
-* This setup uses a stromsensor6mm board with a 5 mOhm shunt resistor
-* More information on this board can be found here: https://github.com/generationmake/stromsensor6mm
-*
-* More information on the INA226_WE library:
-* https://wolles-elektronikkiste.de/en/ina226-current-and-power-sensor (English)
-* https://wolles-elektronikkiste.de/ina226 (German)
-* 
+* Test sketch for Victor Liu EPQ 2022 prototype
+* Derived from example sketch for the INA226_WE library
 ***************************************************************************/
 #include <Wire.h>
 #include <SPI.h>
