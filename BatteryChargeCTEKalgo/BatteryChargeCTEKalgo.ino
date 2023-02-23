@@ -14,6 +14,10 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <INA226_WE.h>
+#include <Adafruit_NeoPixel.h>
+
+#define PIXEL_PIN 8
+Adafruit_NeoPixel pixels(1, 8, NEO_GRB+KHZ800);
 
 #define RELAY 9
 #define DIGI_CS 4
@@ -90,14 +94,21 @@ enum ErrorType {
   BatteryErr
 };
 
+void statusColor(int r, int g, int b) {
+  pixels.setPixelColor(0, (r, g, b));
+  pixels.show();
+}
+
 void setup() {
   Serial1.begin(57600);
   Serial.begin(9600);
   while(!Serial && !(analogRead(BAT_DET) > 100)); // wait until serial comes up on Arduino Leonardo or MKR WiFi 1010
+  pixels.begin();
+  pixels.clear();
 
   SPI.begin();
   pinMode(DIGI_CS, OUTPUT);
-  
+  pinMode(13, OUTPUT);
   Wire.begin();
   ina226.init();
 
@@ -174,6 +185,7 @@ void stabilizeNoLoadV(float targetV) {
   digitalWrite(ENABLE, HIGH);
   float currentV = 0;
   while (currentV-NOLOAD_HYST >= targetV || currentV+NOLOAD_HYST <= targetV) {
+    digitalWrite(13, !digitalRead(13));
     if (targetV > currentV) {
       incDigipot();
     } else {
@@ -183,9 +195,11 @@ void stabilizeNoLoadV(float targetV) {
     delay(NOLOAD_UPD_INTERVAL);
   }
   Serial.println(getDigipot());
+  digitalWrite(13, LOW);
 }
 
 void startSoft() {
+  statusColor(0, 255, 0);
   Serial.print("Battery detected!");
   timeElapsed = 0;
   currentState = SoftStart;
@@ -198,6 +212,7 @@ void startSoft() {
 }
 
 void error(ErrorType type=UnknownErr) {
+  statusColor(255, 0, 0);
   Serial.println("Error encountered - shut it down...");
   currentState = Error;
   digitalWrite(RELAY, LOW);
@@ -288,8 +303,11 @@ void loop() {
       if (analogRead(BAT_DET) > BATDET_VTHR) {
         startSoft();
       }
-      delay(3000); 
-      // no break; because we want to go straight to softstart
+      delay(3000);
+      statusColor(0, 255, 0);
+      delay(100);
+      statusColor(0, 0, 0); 
+      break;
     case SoftStart:
       if (busVoltage_V > SOFTEND_VTHR) {
         startBulk();
