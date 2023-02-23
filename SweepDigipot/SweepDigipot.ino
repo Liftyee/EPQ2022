@@ -16,7 +16,7 @@
 #include <INA226_WE.h>
 
 #define RELAY 9
-#define DIGI_CS 5
+#define DIGI_CS 4
 #define ENABLE 10
 #define UPDATE_PERIOD 1000
 #define N_SAMPLES 10
@@ -132,6 +132,8 @@ void setup() {
   Serial.println("Digipot setting, Output voltage, Output current, INA calculated output power");
   pinMode(RELAY, OUTPUT);
   digitalWrite(RELAY, HIGH);
+  pinMode(ENABLE, OUTPUT);
+  digitalWrite(ENABLE, HIGH);
   
   ina226.waitUntilConversionCompleted(); //if you comment this line the first data might be zero
   setDigipot(0);

@@ -7,9 +7,9 @@
 #include <INA226_WE.h>
 
 #define RELAY 9
-#define DIGI_CS 5
+#define DIGI_CS 4
 #define ENABLE 10
-#define UPDATE_PERIOD 3000
+#define UPDATE_PERIOD 500
 
 #define I2C_ADDRESS 0x40
 
@@ -80,7 +80,7 @@ void setup() {
   AVERAGE_512        512
   AVERAGE_1024      1024
   */
-  //ina226.setAverage(AVERAGE_16); // choose mode and uncomment for change of default
+  ina226.setAverage(AVERAGE_256); // choose mode and uncomment for change of default
 
   /* Set conversion time in microseconds
      One set of shunt and bus voltage conversion will take: 
@@ -96,7 +96,7 @@ void setup() {
      CONV_TIME_4156       4.156 ms
      CONV_TIME_8244       8.244 ms  
   */
-  //ina226.setConversionTime(CONV_TIME_1100); //choose conversion time and uncomment for change of default
+  ina226.setConversionTime(CONV_TIME_588); //choose conversion time and uncomment for change of default
   
   /* Set measure mode
   POWER_DOWN - INA226 switched off
@@ -122,6 +122,8 @@ void setup() {
 
   pinMode(RELAY, OUTPUT);
   digitalWrite(RELAY, LOW);
+  pinMode(ENABLE, OUTPUT);
+  digitalWrite(ENABLE, HIGH);
   
   ina226.waitUntilConversionCompleted(); //if you comment this line the first data might be zero
 }
@@ -160,7 +162,7 @@ void loop() {
     int instr = Serial.parseInt();
     if (instr > 256) {
       digitalWrite(RELAY, !digitalRead(RELAY));
-      
+      digitalWrite(ENABLE, !digitalRead(ENABLE));
     } else if (instr == 256) {
       setDigipot(0);
       for (int i = 0; i < 127; i++) {
