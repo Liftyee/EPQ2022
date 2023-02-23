@@ -88,7 +88,7 @@ enum ErrorType {
   UnknownErr,
   TimeoutErr,
   BatteryErr
-}
+};
 
 void setup() {
   Serial1.begin(57600);
@@ -112,7 +112,7 @@ void setup() {
   AVERAGE_512        512
   AVERAGE_1024      1024
   */
-  ina226.setAverage(AVERAGE_128); // choose mode and uncomment for change of default
+  ina226.setAverage(AVERAGE_16); // choose mode and uncomment for change of default
 
   /* Set conversion time in microseconds
      One set of shunt and bus voltage conversion will take: 
@@ -128,7 +128,7 @@ void setup() {
      CONV_TIME_4156       4.156 ms
      CONV_TIME_8244       8.244 ms  
   */
-  ina226.setConversionTime(CONV_TIME_332); //choose conversion time and uncomment for change of default
+  ina226.setConversionTime(CONV_TIME_4156); //choose conversion time and uncomment for change of default
   
   /* Set measure mode
   POWER_DOWN - INA226 switched off
@@ -148,7 +148,8 @@ void setup() {
      from values obtained with calibrated equipment you can define a correction factor.
      Correction factor = current delivered from calibrated equipment / current delivered by INA226
   */
-  // ina226.setCorrectionFactor(0.95);
+  // correct the error
+  ina226.setCorrectionFactor(0.25);
   
   Serial.println("Test Battery Charger implementing CTEK algorithm");
   pinMode(RELAY, OUTPUT); // output relay control
@@ -165,8 +166,12 @@ void setup() {
 
 #define NOLOAD_HYST 0.05 // V, on each side
 #define NOLOAD_UPD_INTERVAL 50 // ms
+#define NOLOAD_DISCH_DELAY 1000
 void stabilizeNoLoadV(float targetV) {
   Serial.print("Stabilizing regulator output at "); Serial.print(targetV); Serial.println("V");
+  digitalWrite(ENABLE, LOW);
+  delay(NOLOAD_DISCH_DELAY);
+  digitalWrite(ENABLE, HIGH);
   float currentV = 0;
   while (currentV-NOLOAD_HYST >= targetV || currentV+NOLOAD_HYST <= targetV) {
     if (targetV > currentV) {
@@ -181,6 +186,7 @@ void stabilizeNoLoadV(float targetV) {
 }
 
 void startSoft() {
+  Serial.print("Battery detected!");
   timeElapsed = 0;
   currentState = SoftStart;
   delay(2000);
@@ -242,9 +248,18 @@ void startFloat() {
   delay(1000);
 }
 
+void stopCharging() {
+  currentState = Done;
+  Serial.println("Charging complete! Disconnecting...");
+  digitalWrite(RELAY, LOW);
+  digitalWrite(ENABLE, LOW);
+  Serial.println("All done!");
+}
+
 #define BATDET_VTHR 100 // analogRead unitss
 #define NEXTSTAGE_ITHR 100
 #define BULKEND_ITHR 500
+#define ABSPEND_ITHR 300 // above the trickle current for a dead-ish battery
 #define SOFTEND_VTHR 12.50
 
 #define ANALYZE_DELAY 180 // seconds
@@ -267,10 +282,6 @@ void loop() {
   loadVoltage_V  = busVoltage_V + (shuntVoltage_mV/1000);
 
   switch(currentState){
-    case Done:
-      digitalWrite(RELAY, LOW);
-      digitalWrite(ENABLE, LOW);      
-      delay(3000);
     case NoBatt:
       digitalWrite(RELAY, LOW);
       digitalWrite(ENABLE, LOW);
@@ -296,7 +307,7 @@ void loop() {
       }   
       break;
     case Absorption:
-      if (current_mA < NEXTSTAGE_ITHR) {
+      if (current_mA < ABSPEND_ITHR) {
         startAnalyze();
       }
       if (timeElapsed > 8*60*60*1000) {
@@ -306,6 +317,7 @@ void loop() {
     case Analyze:
       if ((millis() - analyzeStart) > (ANALYZE_DELAY*1000)) {
         digitalWrite(RELAY, HIGH);
+        delay(2000);
         ina226.readAndClearFlags();
         busVoltage_V = ina226.getBusVoltage_V();
         if (busVoltage_V > ANALYZE_VTHR) {
@@ -316,8 +328,14 @@ void loop() {
       }
     case Float:
       if (timeElapsed > 8*60*60*1000) {
-        error();
+        stopCharging();
       }
+      break;
+    case Done:
+      if (analogRead(BAT_DET < BATDET_VTHR)) {
+        currentState = NoBatt;
+      }
+      delay(1000);
       break;
       
   }
