@@ -16,9 +16,9 @@
 #include <INA226_WE.h>
 
 #define RELAY 9
-#define DIGI_CS 5
+#define DIGI_CS 4
 #define ENABLE 10
-#define MEAS_SEL 11
+#define BAT_DET A2
 #define UPDATE_PERIOD 1000
 #define N_SAMPLES 10
 
@@ -81,12 +81,19 @@ enum Stage {
   Float,
   Error,
   Done
-}
+};
 Stage currentState;
 
+enum ErrorType {
+  UnknownErr,
+  TimeoutErr,
+  BatteryErr
+}
+
 void setup() {
+  Serial1.begin(57600);
   Serial.begin(9600);
-  while(!Serial); // wait until serial comes up on Arduino Leonardo or MKR WiFi 1010
+  while(!Serial && !(analogRead(BAT_DET) > 100)); // wait until serial comes up on Arduino Leonardo or MKR WiFi 1010
 
   SPI.begin();
   pinMode(DIGI_CS, OUTPUT);
@@ -105,13 +112,13 @@ void setup() {
   AVERAGE_512        512
   AVERAGE_1024      1024
   */
-  ina226.setAverage(AVERAGE_16); // choose mode and uncomment for change of default
+  ina226.setAverage(AVERAGE_128); // choose mode and uncomment for change of default
 
   /* Set conversion time in microseconds
      One set of shunt and bus voltage conversion will take: 
      number of samples to be averaged x conversion time x 2
      
-     * Mode *         * conversion time *
+     * Mode *         * conversion time *r
      CONV_TIME_140          140 µs
      CONV_TIME_204          204 µs
      CONV_TIME_332          332 µs
@@ -121,7 +128,7 @@ void setup() {
      CONV_TIME_4156       4.156 ms
      CONV_TIME_8244       8.244 ms  
   */
-  //ina226.setConversionTime(CONV_TIME_1100); //choose conversion time and uncomment for change of default
+  ina226.setConversionTime(CONV_TIME_332); //choose conversion time and uncomment for change of default
   
   /* Set measure mode
   POWER_DOWN - INA226 switched off
@@ -148,8 +155,6 @@ void setup() {
   digitalWrite(RELAY, LOW); // open relay
   pinMode(ENABLE, OUTPUT); // regulator enable control
   digitalWrite(ENABLE, LOW); // enable regulator
-  pinMode(MEAS_SEL, OUTPUT); // voltage measurement relay control
-  digitalWrite(MEAS_SEL, HIGH); // measure connector voltage
   
   setDigipot(0);
   currentState = NoBatt;
@@ -161,8 +166,7 @@ void setup() {
 #define NOLOAD_HYST 0.05 // V, on each side
 #define NOLOAD_UPD_INTERVAL 50 // ms
 void stabilizeNoLoadV(float targetV) {
-  Serial.print("Stabilizing regulator output at "); Serial.print(targetV); Serial.print("V");
-  digitalWrite(MEAS_SEL, HIGH);
+  Serial.print("Stabilizing regulator output at "); Serial.print(targetV); Serial.println("V");
   float currentV = 0;
   while (currentV-NOLOAD_HYST >= targetV || currentV+NOLOAD_HYST <= targetV) {
     if (targetV > currentV) {
@@ -173,58 +177,81 @@ void stabilizeNoLoadV(float targetV) {
     currentV = ina226.getBusVoltage_V();
     delay(NOLOAD_UPD_INTERVAL);
   }
+  Serial.println(getDigipot());
 }
 
 void startSoft() {
+  timeElapsed = 0;
   currentState = SoftStart;
-  Serial.print("Starting charge at 12.6V...");
+  delay(2000);
+  Serial.println("Starting charge at 12.6V...");
   digitalWrite(ENABLE, HIGH);
   stabilizeNoLoadV(12.6);
-  Serial.print("Voltage ready - switch on the output...")
-  digitalWrite(MEAS_SEL, LOW);
+  Serial.println("Voltage ready - switch on the output...");
   digitalWrite(RELAY, HIGH);
 }
 
-void error() {
+void error(ErrorType type=UnknownErr) {
   Serial.println("Error encountered - shut it down...");
   currentState = Error;
   digitalWrite(RELAY, LOW);
-  digitalWrite(MEAS_SEL, LOW);
   digitalWrite(ENABLE, LOW);
   setDigipot(0);
 }
 
 void startBulk() {
+  timeElapsed = 0;
   currentState = Bulk;
-  Serial.print("Starting bulk charge at 14.7V...");
+  Serial.println("Starting bulk charge at 14.7V...");
   digitalWrite(ENABLE, HIGH);
   digitalWrite(RELAY, LOW);
   stabilizeNoLoadV(14.7);
-  Serial.print("Voltage ready - switch on the output...")
-  digitalWrite(MEAS_SEL, LOW);
+  Serial.println("Voltage ready - switch on the output...");
   digitalWrite(RELAY, HIGH);
+  delay(1000);
 }
 
 void startAbsorption() {
+  timeElapsed = 0;
   currentState = Absorption;
-  Serial.print("Starting constant voltage charge...");
+  Serial.println("Starting constant voltage charge...");
   digitalWrite(ENABLE, HIGH);
-  digitalWrite(MEAS_SEL, LOW);
   digitalWrite(RELAY, HIGH);
 }
 
+long long analyzeStart;
 void startAnalyze() {
+  timeElapsed = 0;
   currentState = Analyze;
-  Serial.print("Stopping charge and performing capacity hold test...");
+  Serial.println("Stopping charge and performing capacity hold test...");
   digitalWrite(RELAY, LOW);
   digitalWrite(ENABLE, LOW);
 
-  error();
+  analyzeStart = millis();
 }
 
+void startFloat() {
+  timeElapsed = 0;
+  currentState = Float;
+  Serial.println("Starting float charge...");
+  digitalWrite(RELAY, LOW);
+  digitalWrite(ENABLE, HIGH);
+  stabilizeNoLoadV(13.6);
+  Serial.println("Voltage ready - switch on the output...");
+  digitalWrite(RELAY, HIGH);
+  delay(1000);
+}
+
+#define BATDET_VTHR 100 // analogRead unitss
 #define NEXTSTAGE_ITHR 100
-#define BULKEND_ITHR 1000
+#define BULKEND_ITHR 500
 #define SOFTEND_VTHR 12.50
+
+#define ANALYZE_DELAY 180 // seconds
+#define ANALYZE_VTHR 12.00 // voltss
+
+#define STATUS_PERIOD 3000
+int lastStatus;
 void loop() {
   float shuntVoltage_mV = 0.0;
   float loadVoltage_V = 0.0;
@@ -242,15 +269,12 @@ void loop() {
   switch(currentState){
     case Done:
       digitalWrite(RELAY, LOW);
-      digitalWrite(ENABLE, LOW);
-      digitalWrite(MEAS_SEL, HIGH);
-      
+      digitalWrite(ENABLE, LOW);      
       delay(3000);
     case NoBatt:
       digitalWrite(RELAY, LOW);
       digitalWrite(ENABLE, LOW);
-      digitalWrite(MEAS_SEL, HIGH);
-      if (busVoltage_V > 7.0) {
+      if (analogRead(BAT_DET) > BATDET_VTHR) {
         startSoft();
       }
       delay(3000); 
@@ -260,7 +284,7 @@ void loop() {
         startBulk();
       }
       if (timeElapsed > 20*60*60*1000) {
-        error();
+        error(TimeoutErr);
       }
       break;
     case Bulk:
@@ -268,7 +292,7 @@ void loop() {
         startAbsorption();
       }
       if (timeElapsed > 20*60*60*1000) {
-        error();
+        error(TimeoutErr);
       }   
       break;
     case Absorption:
@@ -276,11 +300,41 @@ void loop() {
         startAnalyze();
       }
       if (timeElapsed > 8*60*60*1000) {
-        error();
+        error(TimeoutErr);
       }
       break;
     case Analyze:
-    
+      if ((millis() - analyzeStart) > (ANALYZE_DELAY*1000)) {
+        digitalWrite(RELAY, HIGH);
+        ina226.readAndClearFlags();
+        busVoltage_V = ina226.getBusVoltage_V();
+        if (busVoltage_V > ANALYZE_VTHR) {
+          startFloat();
+        } else {
+          error(BatteryErr);
+        }
+      }
+    case Float:
+      if (timeElapsed > 8*60*60*1000) {
+        error();
+      }
+      break;
+      
   }
-  timeElapsed += (millis() - lastMillis)
+  timeElapsed += (millis() - lastMillis);
+  lastMillis = millis();
+  if (millis() >= STATUS_PERIOD+lastStatus) {
+    Serial.print(busVoltage_V);
+    Serial.print(",");
+    Serial.print(current_mA);
+    Serial.print(",");
+    Serial.println(power_mW);
+
+    Serial1.print(busVoltage_V);
+    Serial1.print(",");
+    Serial1.print(current_mA);
+    Serial1.print(",");
+    Serial1.println(power_mW);
+    lastStatus = millis();
+  }
 }
