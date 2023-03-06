@@ -1,16 +1,44 @@
 /***************************************************************************
-* Example sketch for the INA226_WE library
-*
-* This sketch is based on the continuous mode example but uses the function setResistorRange to set a different resistor value. 
-*  
-* This setup uses a stromsensor6mm board with a 5 mOhm shunt resistor
-* More information on this board can be found here: https://github.com/generationmake/stromsensor6mm
-*
-* More information on the INA226_WE library:
-* https://wolles-elektronikkiste.de/en/ina226-current-and-power-sensor (English)
-* https://wolles-elektronikkiste.de/ina226 (German)
+* Implementation of the CTEK charging algorithm
+* with modifications and tweakables
 * 
+* - Victor Liu 2023
+* based on INA226_WE example sketch
 ***************************************************************************/
+
+/**********************************************
+ * Configuration settings
+ *********************************************/
+// Voltage stabilization settings
+#define NOLOAD_HYST 0.05 // V, on each side
+#define NOLOAD_UPD_INTERVAL 50 // ms
+#define NOLOAD_DISCH_DELAY 1000
+
+// Battery charge stage voltages
+#define SOFT_V 12.6
+#define BULK_V 15.0
+#define FLOAT_V 13.6 
+
+// Charge stage end thresholds
+#define BATDET_VTHR 100 // battery detect: analogRead unitss
+#define NEXTSTAGE_ITHR 100 // not used
+#define BULKEND_ITHR 500 // end bulk
+#define ABSPEND_ITHR 300 // above the trickle current for a dead-ish battery
+#define SOFTEND_VTHR 12.50
+
+// Analyze stage parameters
+#define ANALYZE_DELAY 180 // seconds
+#define ANALYZE_VTHR 12.00 // volts
+
+// Count of threshold successes to go to next stage
+#define NEXTSTAGE_COUNTTHR 20
+
+#define STATUS_PERIOD 3000 // Period with which to show the charger status
+
+/**********************************************
+ * End of configuration settings
+ *********************************************/
+
 #include <Wire.h>
 #include <SPI.h>
 #include <INA226_WE.h>
@@ -183,9 +211,6 @@ void setup() {
   lastMillis = millis();
 }
 
-#define NOLOAD_HYST 0.05 // V, on each side
-#define NOLOAD_UPD_INTERVAL 50 // ms
-#define NOLOAD_DISCH_DELAY 1000
 void stabilizeNoLoadV(float targetV) {
   showStatus(255, 127, 0);
   Serial.print("Stabilizing regulator output at "); Serial.print(targetV); Serial.println("V");
@@ -207,9 +232,6 @@ void stabilizeNoLoadV(float targetV) {
   digitalWrite(13, LOW);
 }
 
-#define SOFT_V 12.6
-#define BULK_V 15.0
-#define FLOAT_V 13.6 
 void startSoft() {
   statusColor(0, 255, 0);
   Serial.print("Battery detected!");
@@ -289,18 +311,6 @@ void stopCharging() {
   Serial.println("All done!");
 }
 
-#define BATDET_VTHR 100 // analogRead unitss
-#define NEXTSTAGE_ITHR 100
-#define BULKEND_ITHR 300
-#define ABSPEND_ITHR 300 // above the trickle current for a dead-ish battery
-#define SOFTEND_VTHR 12.50
-
-#define ANALYZE_DELAY 180 // seconds
-#define ANALYZE_VTHR 12.00 // voltss
-
-#define NEXTSTAGE_COUNTTHR 20
-
-#define STATUS_PERIOD 3000
 int lastStatus;
 int advanceStageCount;
 void loop() {
