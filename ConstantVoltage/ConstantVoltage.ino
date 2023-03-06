@@ -67,6 +67,8 @@ void setup() {
 
   SPI.begin();
   pinMode(DIGI_CS, OUTPUT);
+  pinMode(10, OUTPUT);
+  digitalWrite(10, HIGH);
   
   Wire.begin();
   ina226.init();
