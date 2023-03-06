@@ -17,7 +17,7 @@
 #include <Adafruit_NeoPixel.h>
 
 #define PIXEL_PIN 8
-Adafruit_NeoPixel pixels(1, 8, NEO_GRB+KHZ800);
+Adafruit_NeoPixel pixels(1, PIXEL_PIN, NEO_GRB+NEO_KHZ800);
 
 #define RELAY 9
 #define DIGI_CS 4
@@ -35,6 +35,12 @@ Adafruit_NeoPixel pixels(1, 8, NEO_GRB+KHZ800);
  * INA226_WE ina226 = INA226_WE(&Wire, I2C_ADDRESS); 
  */
 INA226_WE ina226 = INA226_WE(I2C_ADDRESS);
+
+void waitForINAClear() {
+  for (int i = 0; i < 5; i++) {
+    ina226.readAndClearFlags();
+  }
+}
 
 byte setDigipot(byte pos)
 {
@@ -95,9 +101,11 @@ enum ErrorType {
 };
 
 void statusColor(int r, int g, int b) {
-  pixels.setPixelColor(0, (r, g, b));
+  pixels.setPixelColor(0, pixels.Color(r, g, b));
   pixels.show();
 }
+
+#define showStatus statusColor
 
 void setup() {
   Serial1.begin(57600);
@@ -198,17 +206,22 @@ void stabilizeNoLoadV(float targetV) {
   digitalWrite(13, LOW);
 }
 
+#define SOFT_V 12.6
+#define BULK_V 15.0
+#define FLOAT_V 13.6 
 void startSoft() {
   statusColor(0, 255, 0);
   Serial.print("Battery detected!");
   timeElapsed = 0;
   currentState = SoftStart;
   delay(2000);
-  Serial.println("Starting charge at 12.6V...");
+  Serial.println("Starting soft charge at SOFT_V V...");
   digitalWrite(ENABLE, HIGH);
-  stabilizeNoLoadV(12.6);
+  stabilizeNoLoadV(SOFT_V);
   Serial.println("Voltage ready - switch on the output...");
   digitalWrite(RELAY, HIGH);
+  showStatus(255, 255, 0);
+  waitForINAClear();
 }
 
 void error(ErrorType type=UnknownErr) {
@@ -223,13 +236,14 @@ void error(ErrorType type=UnknownErr) {
 void startBulk() {
   timeElapsed = 0;
   currentState = Bulk;
-  Serial.println("Starting bulk charge at 14.7V...");
+  Serial.println("Starting bulk charge at BULK_V V...");
   digitalWrite(ENABLE, HIGH);
   digitalWrite(RELAY, LOW);
-  stabilizeNoLoadV(14.7);
+  stabilizeNoLoadV(BULK_V);
   Serial.println("Voltage ready - switch on the output...");
   digitalWrite(RELAY, HIGH);
-  delay(1000);
+  showStatus(127, 255, 0);
+  waitForINAClear();
 }
 
 void startAbsorption() {
@@ -238,12 +252,14 @@ void startAbsorption() {
   Serial.println("Starting constant voltage charge...");
   digitalWrite(ENABLE, HIGH);
   digitalWrite(RELAY, HIGH);
+  waitForINAClear();
 }
 
 long long analyzeStart;
 void startAnalyze() {
   timeElapsed = 0;
   currentState = Analyze;
+  showStatus(255, 0, 0);
   Serial.println("Stopping charge and performing capacity hold test...");
   digitalWrite(RELAY, LOW);
   digitalWrite(ENABLE, LOW);
@@ -257,7 +273,7 @@ void startFloat() {
   Serial.println("Starting float charge...");
   digitalWrite(RELAY, LOW);
   digitalWrite(ENABLE, HIGH);
-  stabilizeNoLoadV(13.6);
+  stabilizeNoLoadV(FLOAT_V);
   Serial.println("Voltage ready - switch on the output...");
   digitalWrite(RELAY, HIGH);
   delay(1000);
@@ -265,6 +281,7 @@ void startFloat() {
 
 void stopCharging() {
   currentState = Done;
+  showStatus(0, 0, 0);
   Serial.println("Charging complete! Disconnecting...");
   digitalWrite(RELAY, LOW);
   digitalWrite(ENABLE, LOW);
@@ -298,6 +315,7 @@ void loop() {
 
   switch(currentState){
     case NoBatt:
+      statusColor(0, 0, 0);
       digitalWrite(RELAY, LOW);
       digitalWrite(ENABLE, LOW);
       if (analogRead(BAT_DET) > BATDET_VTHR) {
