@@ -65,6 +65,8 @@ void setup() {
 
   SPI.begin();
   pinMode(DIGI_CS, OUTPUT);
+  pinMode(10, OUTPUT);
+  digitalWrite(10, LOW);
   
   Wire.begin();
   ina226.init();
@@ -162,7 +164,7 @@ void loop() {
     int instr = Serial.parseInt();
     if (instr > 256) {
       digitalWrite(RELAY, !digitalRead(RELAY));
-      digitalWrite(ENABLE, !digitalRead(ENABLE));
+      //digitalWrite(ENABLE, !digitalRead(ENABLE));
     } else if (instr == 256) {
       setDigipot(0);
       for (int i = 0; i < 127; i++) {
