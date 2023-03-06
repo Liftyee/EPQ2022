@@ -131,7 +131,7 @@ void setup() {
   AVERAGE_512        512
   AVERAGE_1024      1024
   */
-  ina226.setAverage(AVERAGE_16); // choose mode and uncomment for change of default
+  //ina226.setAverage(AVERAGE_4); // choose mode and uncomment for change of default
 
   /* Set conversion time in microseconds
      One set of shunt and bus voltage conversion will take: 
@@ -147,7 +147,7 @@ void setup() {
      CONV_TIME_4156       4.156 ms
      CONV_TIME_8244       8.244 ms  
   */
-  ina226.setConversionTime(CONV_TIME_4156); //choose conversion time and uncomment for change of default
+  //ina226.setConversionTime(CONV_TIME_1100); //choose conversion time and uncomment for change of default
   
   /* Set measure mode
   POWER_DOWN - INA226 switched off
@@ -161,14 +161,14 @@ void setup() {
      current range is up to 10.0 A
      default was 100 mOhm and about 1.3 A
   */
-  ina226.setResistorRange(0.01,8.19); // choose resistor 5 mOhm and gain range up to 10 A
+  ina226.setResistorRange(0.01,10); // choose resistor 5 mOhm and gain range up to 10 A
   
   /* If the current values delivered by the INA226 differ by a constant factor
      from values obtained with calibrated equipment you can define a correction factor.
      Correction factor = current delivered from calibrated equipment / current delivered by INA226
   */
   // correct the error
-  ina226.setCorrectionFactor(0.25);
+  //ina226.setCorrectionFactor(0.25);
   
   Serial.println("Test Battery Charger implementing CTEK algorithm");
   pinMode(RELAY, OUTPUT); // output relay control
@@ -187,6 +187,7 @@ void setup() {
 #define NOLOAD_UPD_INTERVAL 50 // ms
 #define NOLOAD_DISCH_DELAY 1000
 void stabilizeNoLoadV(float targetV) {
+  showStatus(255, 127, 0);
   Serial.print("Stabilizing regulator output at "); Serial.print(targetV); Serial.println("V");
   digitalWrite(ENABLE, LOW);
   delay(NOLOAD_DISCH_DELAY);
@@ -202,7 +203,7 @@ void stabilizeNoLoadV(float targetV) {
     currentV = ina226.getBusVoltage_V();
     delay(NOLOAD_UPD_INTERVAL);
   }
-  Serial.println(getDigipot());
+  Serial.print("Digipot setpoint:"); Serial.println(getDigipot());
   digitalWrite(13, LOW);
 }
 
@@ -215,7 +216,7 @@ void startSoft() {
   timeElapsed = 0;
   currentState = SoftStart;
   delay(2000);
-  Serial.println("Starting soft charge at SOFT_V V...");
+  Serial.println("Starting soft charge...");
   digitalWrite(ENABLE, HIGH);
   stabilizeNoLoadV(SOFT_V);
   Serial.println("Voltage ready - switch on the output...");
@@ -236,7 +237,7 @@ void error(ErrorType type=UnknownErr) {
 void startBulk() {
   timeElapsed = 0;
   currentState = Bulk;
-  Serial.println("Starting bulk charge at BULK_V V...");
+  Serial.println("Starting bulk charge...");
   digitalWrite(ENABLE, HIGH);
   digitalWrite(RELAY, LOW);
   stabilizeNoLoadV(BULK_V);
@@ -259,7 +260,7 @@ long long analyzeStart;
 void startAnalyze() {
   timeElapsed = 0;
   currentState = Analyze;
-  showStatus(255, 0, 0);
+  showStatus(255, 255, 0);
   Serial.println("Stopping charge and performing capacity hold test...");
   digitalWrite(RELAY, LOW);
   digitalWrite(ENABLE, LOW);
@@ -290,15 +291,18 @@ void stopCharging() {
 
 #define BATDET_VTHR 100 // analogRead unitss
 #define NEXTSTAGE_ITHR 100
-#define BULKEND_ITHR 500
+#define BULKEND_ITHR 300
 #define ABSPEND_ITHR 300 // above the trickle current for a dead-ish battery
 #define SOFTEND_VTHR 12.50
 
 #define ANALYZE_DELAY 180 // seconds
 #define ANALYZE_VTHR 12.00 // voltss
 
+#define NEXTSTAGE_COUNTTHR 20
+
 #define STATUS_PERIOD 3000
 int lastStatus;
+int advanceStageCount;
 void loop() {
   float shuntVoltage_mV = 0.0;
   float loadVoltage_V = 0.0;
@@ -328,6 +332,11 @@ void loop() {
       break;
     case SoftStart:
       if (busVoltage_V > SOFTEND_VTHR) {
+        //Serial.print("Candidate continue...");
+        advanceStageCount++;
+      }
+      if (advanceStageCount > NEXTSTAGE_COUNTTHR) {
+        advanceStageCount = 0;
         startBulk();
       }
       if (timeElapsed > 20*60*60*1000) {
@@ -336,6 +345,11 @@ void loop() {
       break;
     case Bulk:
       if (current_mA < BULKEND_ITHR) {
+        //Serial.print("Candidate continue...");
+        advanceStageCount++;
+      }
+      if (advanceStageCount > NEXTSTAGE_COUNTTHR) {
+        advanceStageCount = 0;
         startAbsorption();
       }
       if (timeElapsed > 20*60*60*1000) {
@@ -344,6 +358,11 @@ void loop() {
       break;
     case Absorption:
       if (current_mA < ABSPEND_ITHR) {
+        //Serial.print("Candidate continue...");
+        advanceStageCount++;
+      }
+      if (advanceStageCount > NEXTSTAGE_COUNTTHR) {
+        advanceStageCount = 0;
         startAnalyze();
       }
       if (timeElapsed > 8*60*60*1000) {
@@ -373,7 +392,6 @@ void loop() {
       }
       delay(1000);
       break;
-      
   }
   timeElapsed += (millis() - lastMillis);
   lastMillis = millis();
