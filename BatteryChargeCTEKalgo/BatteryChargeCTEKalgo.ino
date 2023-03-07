@@ -34,6 +34,8 @@
 #define NEXTSTAGE_COUNTTHR 20
 
 #define STATUS_PERIOD 3000 // Period with which to show the charger status
+#define IMAX_PERIOD 15000
+#define MAX_CUR_CONST 0.631599 // empirically validated
 
 /**********************************************
  * End of configuration settings
@@ -232,6 +234,31 @@ void stabilizeNoLoadV(float targetV) {
   digitalWrite(13, LOW);
 }
 
+void reMaximiseCurrent() {
+    Serial.print("Remaximising voltage...");
+    // disable regulator
+    digitalWrite(ENABLE, LOW);
+    digitalWrite(RELAY, HIGH);
+
+    // make the current read properly
+    ina226.readAndClearFlags();
+    delay(2000);
+    ina226.readAndClearFlags();
+    float bat_V = ina226.getBusVoltage_V();
+    Serial.print(bat_V);
+    digitalWrite(RELAY, LOW);
+    digitalWrite(ENABLE, HIGH);
+    float targetV = bat_V+MAX_CUR_CONST;
+    if (targetV > BULK_V) {
+      targetV = BULK_V;
+    }
+    stabilizeNoLoadV(bat_V+MAX_CUR_CONST);
+    digitalWrite(RELAY, HIGH);    
+    delay(2000);
+    ina226.readAndClearFlags();
+    //lastIMax = millis();
+}
+
 void startSoft() {
   statusColor(0, 255, 0);
   Serial.print("Battery detected!");
@@ -313,6 +340,7 @@ void stopCharging() {
 
 int lastStatus;
 int advanceStageCount;
+long lastIMax;
 void loop() {
   float shuntVoltage_mV = 0.0;
   float loadVoltage_V = 0.0;
@@ -365,6 +393,10 @@ void loop() {
       if (timeElapsed > 20*60*60*1000) {
         error(TimeoutErr);
       }   
+      if (millis() > lastIMax + IMAX_PERIOD) {
+        reMaximiseCurrent();
+        lastIMax = millis();
+      }
       break;
     case Absorption:
       if (current_mA < ABSPEND_ITHR) {
