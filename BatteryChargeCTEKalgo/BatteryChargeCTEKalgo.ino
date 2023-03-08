@@ -16,14 +16,14 @@
 
 // Battery charge stage voltages
 #define SOFT_V 12.6
-#define BULK_V 12.7
+#define BULK_V 14.7
 #define FLOAT_V 13.6 
 
 // Charge stage end thresholds
 #define BATDET_VTHR 100 // battery detect: analogRead unitss
 #define NEXTSTAGE_ITHR 100 // not used
-#define BULKEND_ITHR 500 // end bulk
-#define ABSPEND_ITHR 300 // above the trickle current for a dead-ish battery
+#define BULKEND_ITHR 200 // end bulk
+#define ABSPEND_ITHR 200 // above the trickle current for a dead-ish battery
 #define SOFTEND_VTHR 12.50
 
 // Analyze stage parameters
@@ -33,8 +33,10 @@
 // Count of threshold successes to go to next stage
 #define NEXTSTAGE_COUNTTHR 20
 
+#define UPDATE_DELAY 200 // Period at which the charger updates 
 #define STATUS_PERIOD 3000 // Period with which to show the charger status
-#define IMAX_PERIOD 15000
+#define IMAX_PERIOD 180*1000 // Period at which to maximise the current
+#define POT_TWEAK_HYST 2 // Amount to tweak the digipot each way to maximise current
 #define MAX_CUR_CONST 0.631599 // empirically validated
 
 /**********************************************
@@ -56,7 +58,7 @@ Adafruit_NeoPixel pixels(1, PIXEL_PIN, NEO_GRB+NEO_KHZ800);
 #define UPDATE_PERIOD 1000
 #define N_SAMPLES 10
 
-#define I2C_ADDRESS 0x40
+#define I2C_ADDRESS 0x40 // Address of INA226
 
 /* There are several ways to create your INA226 object:
  * INA226_WE ina226 = INA226_WE(); -> uses I2C Address = 0x40 / Wire
@@ -137,7 +139,9 @@ void statusColor(int r, int g, int b) {
 
 #define showStatus statusColor
 
+int advanceStageCount;
 void setup() {
+  advanceStageCount = 0;
   Serial1.begin(57600);
   Serial.begin(9600);
   while(!Serial && !(analogRead(BAT_DET) > 100)); // wait until serial comes up on Arduino Leonardo or MKR WiFi 1010
@@ -161,7 +165,7 @@ void setup() {
   AVERAGE_512        512
   AVERAGE_1024      1024
   */
-  //ina226.setAverage(AVERAGE_4); // choose mode and uncomment for change of default
+  ina226.setAverage(AVERAGE_4); // choose mode and uncomment for change of default
 
   /* Set conversion time in microseconds
      One set of shunt and bus voltage conversion will take: 
@@ -177,7 +181,7 @@ void setup() {
      CONV_TIME_4156       4.156 ms
      CONV_TIME_8244       8.244 ms  
   */
-  //ina226.setConversionTime(CONV_TIME_1100); //choose conversion time and uncomment for change of default
+  ina226.setConversionTime(CONV_TIME_1100); //choose conversion time and uncomment for change of default
   
   /* Set measure mode
   POWER_DOWN - INA226 switched off
@@ -232,6 +236,8 @@ void stabilizeNoLoadV(float targetV) {
   }
   Serial.print("Digipot setpoint:"); Serial.println(getDigipot());
   digitalWrite(13, LOW);
+
+  ina226.readAndClearFlags();
 }
 
 void reMaximiseCurrent() {
@@ -257,6 +263,35 @@ void reMaximiseCurrent() {
     delay(2000);
     ina226.readAndClearFlags();
     //lastIMax = millis();
+}
+
+#define I_AVG_REPEAT 20.0
+#define I_AVG_PERIOD 300
+float readAverageCurrent() {
+  float total;
+  for (int i = 0; i < I_AVG_REPEAT; i++) {
+    ina226.readAndClearFlags();
+    total += ina226.getBusPower();
+    delay(I_AVG_PERIOD);
+  }
+  return total/I_AVG_REPEAT;
+}
+
+
+void tweakDigipotMaxCurrent(int prevSetting) {
+  Serial.print("Tweaking digipot setting to increase current...");
+  float maxCurrentValue = 0;
+  int maxDigiValue = 0;
+  for (int i = prevSetting-POT_TWEAK_HYST; i <= prevSetting+POT_TWEAK_HYST; i++) {
+    setDigipot(i);
+    float temp = readAverageCurrent();
+    if (temp >= maxCurrentValue) {
+      maxCurrentValue = temp;
+      maxDigiValue = i;
+    }
+  }
+  Serial.print("Maximum value was "); Serial.print(maxCurrentValue/1000); Serial.print(" at digipot "); Serial.println(maxDigiValue);
+  setDigipot(maxDigiValue);
 }
 
 void startSoft() {
@@ -318,6 +353,7 @@ void startAnalyze() {
 }
 
 void startFloat() {
+  showStatus(0, 127, 255);
   timeElapsed = 0;
   currentState = Float;
   Serial.println("Starting float charge...");
@@ -339,7 +375,6 @@ void stopCharging() {
 }
 
 int lastStatus;
-int advanceStageCount;
 long lastIMax;
 void loop() {
   float shuntVoltage_mV = 0.0;
@@ -395,6 +430,7 @@ void loop() {
       }   
       if (millis() > lastIMax + IMAX_PERIOD) {
         reMaximiseCurrent();
+        tweakDigipotMaxCurrent(getDigipot());
         lastIMax = millis();
       }
       break;
@@ -412,6 +448,10 @@ void loop() {
       }
       break;
     case Analyze:
+      if (analogRead(BAT_DET < BATDET_VTHR)) {
+        Serial.println("No battery detected!");
+        currentState = NoBatt;
+      }
       if ((millis() - analyzeStart) > (ANALYZE_DELAY*1000)) {
         digitalWrite(RELAY, HIGH);
         delay(2000);
@@ -451,4 +491,6 @@ void loop() {
     Serial1.println(power_mW);
     lastStatus = millis();
   }
+
+  delay(UPDATE_DELAY);
 }
