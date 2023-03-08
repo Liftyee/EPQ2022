@@ -33,11 +33,19 @@
 // Count of threshold successes to go to next stage
 #define NEXTSTAGE_COUNTTHR 20
 
-#define UPDATE_DELAY 200 // Period at which the charger updates 
+// Constants for current maximisation
+#define MAX_CUR_CONST 0.631599 // Voltage above which current is max, empirically validated
+#define POT_TWEAK_HYST 2 // Amount to tweak the digipot each way to maximise current to find the absolute maximum
+
+// Current averaging function parameters
+#define I_AVG_REPEAT 20.0
+#define I_AVG_PERIOD 300
+
+// Charging algorithm behaviour
+#define UPDATE_PERIOD 200 // Period at which the charger updates 
 #define STATUS_PERIOD 3000 // Period with which to show the charger status
 #define IMAX_PERIOD 180*1000 // Period at which to maximise the current
-#define POT_TWEAK_HYST 2 // Amount to tweak the digipot each way to maximise current
-#define MAX_CUR_CONST 0.631599 // empirically validated
+
 
 /**********************************************
  * End of configuration settings
@@ -55,9 +63,6 @@ Adafruit_NeoPixel pixels(1, PIXEL_PIN, NEO_GRB+NEO_KHZ800);
 #define DIGI_CS 4
 #define ENABLE 10
 #define BAT_DET A2
-#define UPDATE_PERIOD 1000
-#define N_SAMPLES 10
-
 #define I2C_ADDRESS 0x40 // Address of INA226
 
 /* There are several ways to create your INA226 object:
@@ -265,8 +270,6 @@ void reMaximiseCurrent() {
     //lastIMax = millis();
 }
 
-#define I_AVG_REPEAT 20.0
-#define I_AVG_PERIOD 300
 float readAverageCurrent() {
   float total;
   for (int i = 0; i < I_AVG_REPEAT; i++) {
@@ -276,7 +279,6 @@ float readAverageCurrent() {
   }
   return total/I_AVG_REPEAT;
 }
-
 
 void tweakDigipotMaxCurrent(int prevSetting) {
   Serial.print("Tweaking digipot setting to increase current...");
@@ -492,5 +494,5 @@ void loop() {
     lastStatus = millis();
   }
 
-  delay(UPDATE_DELAY);
+  delay(UPDATE_PERIOD);
 }
