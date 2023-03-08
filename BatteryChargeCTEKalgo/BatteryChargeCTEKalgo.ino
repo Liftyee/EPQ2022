@@ -16,7 +16,7 @@
 
 // Battery charge stage voltages
 #define SOFT_V 12.6
-#define BULK_V 15.0
+#define BULK_V 12.7
 #define FLOAT_V 13.6 
 
 // Charge stage end thresholds
