@@ -151,6 +151,7 @@ void setup() {
   Serial.begin(9600);
   while(!Serial && !(analogRead(BAT_DET) > 100)); // wait until serial comes up on Arduino Leonardo or MKR WiFi 1010
   pixels.begin();
+  pixels.setBrightness(50);
   pixels.clear();
 
   SPI.begin();
@@ -251,23 +252,26 @@ void reMaximiseCurrent() {
     digitalWrite(ENABLE, LOW);
     digitalWrite(RELAY, HIGH);
 
+    showStatus(255, 0, 255);
+
     // make the current read properly
     ina226.readAndClearFlags();
     delay(2000);
     ina226.readAndClearFlags();
     float bat_V = ina226.getBusVoltage_V();
-    Serial.print(bat_V);
+    // Serial.print(bat_V);
     digitalWrite(RELAY, LOW);
     digitalWrite(ENABLE, HIGH);
     float targetV = bat_V+MAX_CUR_CONST;
     if (targetV > BULK_V) {
       targetV = BULK_V;
     }
-    stabilizeNoLoadV(bat_V+MAX_CUR_CONST);
+    stabilizeNoLoadV(targetV);
     digitalWrite(RELAY, HIGH);    
-    delay(2000);
-    ina226.readAndClearFlags();
+//    delay(2000);
+//    ina226.readAndClearFlags();
     //lastIMax = millis();
+    tweakDigipotMaxCurrent(getDigipot());
 }
 
 float readAverageCurrent() {
@@ -276,6 +280,7 @@ float readAverageCurrent() {
     ina226.readAndClearFlags();
     total += ina226.getBusPower();
     delay(I_AVG_PERIOD);
+    digitalWrite(13, !digitalRead(13));
   }
   return total/I_AVG_REPEAT;
 }
@@ -294,6 +299,7 @@ void tweakDigipotMaxCurrent(int prevSetting) {
   }
   Serial.print("Maximum value was "); Serial.print(maxCurrentValue/1000); Serial.print(" at digipot "); Serial.println(maxDigiValue);
   setDigipot(maxDigiValue);
+  digitalWrite(13, LOW);
 }
 
 void startSoft() {
@@ -320,8 +326,10 @@ void error(ErrorType type=UnknownErr) {
   setDigipot(0);
 }
 
+long lastIMax;
 void startBulk() {
   timeElapsed = 0;
+  lastIMax = 0;
   currentState = Bulk;
   Serial.println("Starting bulk charge...");
   digitalWrite(ENABLE, HIGH);
@@ -331,6 +339,7 @@ void startBulk() {
   digitalWrite(RELAY, HIGH);
   showStatus(127, 255, 0);
   waitForINAClear();
+  reMaximiseCurrent();
 }
 
 void startAbsorption() {
@@ -377,7 +386,6 @@ void stopCharging() {
 }
 
 int lastStatus;
-long lastIMax;
 void loop() {
   float shuntVoltage_mV = 0.0;
   float loadVoltage_V = 0.0;
@@ -432,7 +440,6 @@ void loop() {
       }   
       if (millis() > lastIMax + IMAX_PERIOD) {
         reMaximiseCurrent();
-        tweakDigipotMaxCurrent(getDigipot());
         lastIMax = millis();
       }
       break;
