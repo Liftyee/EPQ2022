@@ -10,41 +10,41 @@
  * Configuration settings
  *********************************************/
 // Voltage stabilization settings
-#define NOLOAD_HYST 0.05 // V, on each side
-#define NOLOAD_UPD_INTERVAL 50 // ms
-#define NOLOAD_DISCH_DELAY 1000
+#define NOLOAD_HYST 		0.05 	// V, on each side
+#define NOLOAD_UPD_INTERVAL 50 		// ms
+#define NOLOAD_DISCH_DELAY 	1000 	// time waited for output to discharge, ms
 
 // Battery charge stage voltages
-#define SOFT_V 12.6
-#define BULK_V 14.7
+#define SOFT_V 	12.6
+#define BULK_V 	14.7
 #define FLOAT_V 13.6 
 
 // Charge stage end thresholds
-#define BATDET_VTHR 100 // battery detect: analogRead unitss
-#define NEXTSTAGE_ITHR 100 // not used
-#define BULKEND_ITHR 200 // end bulk
-#define ABSPEND_ITHR 200 // above the trickle current for a dead-ish battery
-#define SOFTEND_VTHR 12.50
+#define BATDET_VTHR 	100 	// battery detect: analogRead units (no accuracy needed)
+#define NEXTSTAGE_ITHR 	100 	// not used
+#define BULKEND_ITHR 	200 	// bulk end current threshold
+#define ABSPEND_ITHR 	200 	// above the trickle current for a dead-ish battery
+#define SOFTEND_VTHR 	12.50 	// soft charge end voltage threshold
 
 // Analyze stage parameters
-#define ANALYZE_DELAY 180 // seconds
-#define ANALYZE_VTHR 12.00 // volts
+#define ANALYZE_DELAY 	180 	// seconds
+#define ANALYZE_VTHR 	12.00 	// volts
 
 // Count of threshold successes to go to next stage
-#define NEXTSTAGE_COUNTTHR 20
+#define NEXTSTAGE_COUNTTHR 	20
 
 // Constants for current maximisation
-#define MAX_CUR_CONST 0.631599 // Voltage above which current is max, empirically validated
-#define POT_TWEAK_HYST 2 // Amount to tweak the digipot each way to maximise current to find the absolute maximum
+#define MAX_CUR_CONST 	0.6	// Voltage above which current is max, empirically validated
+#define POT_TWEAK_HYST 	2 	// Amount to tweak the digipot each way to maximise current to find the absolute maximum
 
 // Current averaging function parameters
-#define I_AVG_REPEAT 20.0
-#define I_AVG_PERIOD 300
+#define I_AVG_REPEAT 20.0	// Number of times to average (float so division works)
+#define I_AVG_PERIOD 300	// Time to wait between samples
 
 // Charging algorithm behaviour
-#define UPDATE_PERIOD 200 // Period at which the charger updates 
-#define STATUS_PERIOD 3000 // Period with which to show the charger status
-#define IMAX_PERIOD 180*1000 // Period at which to maximise the current
+#define UPDATE_PERIOD 	200 		// Period at which the charger updates 
+#define STATUS_PERIOD 	3000 		// Period with which to show the charger status
+#define IMAX_PERIOD 	180*1000 	// Period at which to maximise the current
 
 
 /**********************************************
@@ -210,7 +210,7 @@ void setup() {
   // correct the error
   //ina226.setCorrectionFactor(0.25);
   
-  Serial.println("Test Battery Charger implementing CTEK algorithm");
+  Serial.println("Battery Charging System EPQ Victor Liu 2023");
   pinMode(RELAY, OUTPUT); // output relay control
   digitalWrite(RELAY, LOW); // open relay
   pinMode(ENABLE, OUTPUT); // regulator enable control
